@@ -1,9 +1,9 @@
+
 import os
 import io
 import base64
-import uuid
 import numpy as np
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -19,10 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 app = Flask(__name__)
-CORS(app)
-
-STATIC_DIR = "static"
-os.makedirs(STATIC_DIR, exist_ok=True)
+CORS(app)  # 👈 Enable CORS for all routes
 
 @app.route("/simulate", methods=["POST"])
 def simulate():
@@ -37,26 +34,15 @@ def simulate():
     zmx_path = download_zmx_file(efl, f_number, hfov)
     lens = parse_zmx_and_create_optic(zmx_path)
 
-    uid = str(uuid.uuid4())[:8]
-    paths = {
-        "draw": os.path.join(STATIC_DIR, f"{uid}_draw.png"),
-        "distortion": os.path.join(STATIC_DIR, f"{uid}_distortion.png"),
-        "rayfan": os.path.join(STATIC_DIR, f"{uid}_rayfan.png")
-    }
-
-    render_plot_to_path(lens.draw, 10, paths["draw"])
-    render_plot_to_path(analysis.Distortion(lens).view, output_path=paths["distortion"])
-    render_plot_to_path(analysis.RayFan(lens).view, output_path=paths["rayfan"])
+    img1 = render_plot(lens.draw, 10)
+    img2 = render_plot(analysis.Distortion(lens).view)
+    img3 = render_plot(analysis.RayFan(lens).view)
 
     return jsonify({
-        "draw": f"/static/{os.path.basename(paths['draw'])}",
-        "distortion": f"/static/{os.path.basename(paths['distortion'])}",
-        "rayfan": f"/static/{os.path.basename(paths['rayfan'])}"
+        "draw": img1,
+        "distortion": img2,
+        "rayfan": img3
     })
-
-@app.route("/static/<path:filename>")
-def serve_static(filename):
-    return send_from_directory(STATIC_DIR, filename)
 
 def download_zmx_file(efl, f_number, hfov, output_dir="lensnet_files"):
     base_url = "https://lensnet.herokuapp.com/"
@@ -141,11 +127,15 @@ def parse_zmx_and_create_optic(zmx_path):
 
     return lens
 
-def render_plot_to_path(plot_func, *args, output_path):
+def render_plot(plot_func, *args):
     fig = plt.figure()
     plot_func(*args)
-    plt.savefig(output_path, format="png", dpi=300)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=300)
     plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode()
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
