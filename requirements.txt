@@ -1,0 +1,6 @@
+flask
+flask-cors
+matplotlib
+selenium
+webdriver-manager
+optiland
